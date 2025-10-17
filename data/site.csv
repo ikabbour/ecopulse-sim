@@ -1,0 +1,4 @@
+﻿site_id,country,lat,lon,co2e_target_tons_per_year
+paris,FR,48.8566,2.3522,120
+lyon,FR,45.7640,4.8357,80
+berlin,DE,52.5200,13.4050,150

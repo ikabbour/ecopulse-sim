@@ -1,0 +1,7 @@
+﻿country,source,unit,co2e_per_unit
+FR,electricity,kWh,0.07
+DE,electricity,kWh,0.38
+FR,gas,kWh,0.202
+DE,gas,kWh,0.202
+FR,diesel,L,2.68
+DE,diesel,L,2.68
