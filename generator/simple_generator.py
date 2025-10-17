@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 FREQ_SECONDS = float(os.getenv("FREQ_SECONDS", "2"))
 SITES = [s.strip() for s in os.getenv("SITES", "paris,lyon,berlin").split(",")]
 OUT_PATH = os.getenv("OUT_PATH", "outbox/raw.energy.jsonl")
+MAX_MESSAGES = int(os.getenv("MAX_MESSAGES", "50"))  # 🔹 Stop après X messages
 RANDOM_SEED = os.getenv("RANDOM_SEED")
 if RANDOM_SEED is not None:
     random.seed(int(RANDOM_SEED))
@@ -19,6 +20,7 @@ DEVICE_MODELS = {
     ("generator", "diesel"):    {"unit": "L",   "baseline": 0.02, "variability": 0.50},
     ("vehicle_fleet", "diesel"):{ "unit": "L",  "baseline": 0.5,  "variability": 0.25},
 }
+
 SITE_DEVICES = {
     site: [
         ("hvac", "electricity"),
@@ -31,7 +33,6 @@ SITE_DEVICES = {
 }
 
 def diurnal_multiplier(dt_hour: float) -> float:
-    # Variation journalière simple (min la nuit, max l'après-midi)
     rad = 2*math.pi * ((dt_hour - 15) / 24.0)
     base = (math.cos(rad) + 1) / 2  # 0..1
     return 0.7 + 0.6 * base         # ~0.7..1.3
@@ -50,7 +51,6 @@ def now_iso_utc() -> str:
 def generate_value(device: str, source: str, now: datetime) -> tuple[float, str]:
     m = DEVICE_MODELS[(device, source)]
     base = m["baseline"]
-    # variations
     v = base
     v *= diurnal_multiplier(now.hour + now.minute/60.0)
     v *= weekend_drop(now.weekday())
@@ -60,13 +60,18 @@ def generate_value(device: str, source: str, now: datetime) -> tuple[float, str]
 
 def main():
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
-    print(f"[EcoPulse] Writing messages to {OUT_PATH} every {FREQ_SECONDS}s (no Kafka)")
+    print(f"[EcoPulse] Writing messages to {OUT_PATH}")
+    print(f"→ {MAX_MESSAGES} messages max, every {FREQ_SECONDS}s\n")
+
+    count = 0
     with open(OUT_PATH, "a", encoding="utf-8") as f:
-        while True:
+        while count < MAX_MESSAGES:
             now = datetime.now(timezone.utc)
             ts = now_iso_utc()
             for site, pairs in SITE_DEVICES.items():
                 for device, source in pairs:
+                    if count >= MAX_MESSAGES:
+                        break
                     value, unit = generate_value(device, source, now)
                     msg = {
                         "site_id": site,
@@ -76,10 +81,12 @@ def main():
                         "unit": unit,
                         "ts": ts,
                     }
-                    # écriture JSONL (une ligne par message)
                     f.write(json.dumps(msg) + "\n")
+                    count += 1
             f.flush()
             time.sleep(FREQ_SECONDS)
+
+    print(f"[EcoPulse] ✅ Done! {count} messages written to {OUT_PATH}")
 
 if __name__ == "__main__":
     main()
